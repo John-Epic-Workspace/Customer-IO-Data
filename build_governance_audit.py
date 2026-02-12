@@ -20,7 +20,7 @@ DATA_INDEX_COLUMN = "Name"
 
 
 def classify_data_category(field_name: str) -> str:
-    value = field_name.lower()
+    value = str(field_name).lower()
     if any(token in value for token in ("ssn", "bank", "routing", "tax")):
         return "Sensitive"
     if any(token in value for token in ("resume", "employment", "cover")):
@@ -33,7 +33,7 @@ def classify_data_category(field_name: str) -> str:
 
 
 def classify_pii_level(field_name: str) -> str:
-    value = field_name.lower()
+    value = str(field_name).lower()
     if "ssn" in value:
         return "Restricted"
     if any(token in value for token in ("email", "phone", "address", "birth")):
@@ -71,8 +71,8 @@ def build_governance_audit():
     if DATA_INDEX_COLUMN not in data_index_df.columns:
         raise KeyError(f"Missing required column in Data Index: '{DATA_INDEX_COLUMN}'")
 
-    # Normalize names
-    normalized_index_names = (
+    # Normalize Data Index names
+    normalized_index_set = set(
         data_index_df[DATA_INDEX_COLUMN]
         .fillna("")
         .astype(str)
@@ -80,8 +80,7 @@ def build_governance_audit():
         .str.lower()
     )
 
-    normalized_index_set = set(normalized_index_names)
-
+    # Normalize HC API names
     normalized_field_names = (
         source_df[API_COLUMN]
         .fillna("")
@@ -96,10 +95,10 @@ def build_governance_audit():
     )
 
     # Data Category
-    source_df["Data Category"] = source_df[API_COLUMN].fillna("").astype(str).map(classify_data_category)
+    source_df["Data Category"] = source_df[API_COLUMN].map(classify_data_category)
 
     # PII Level
-    source_df["PII Level"] = source_df[API_COLUMN].fillna("").astype(str).map(classify_pii_level)
+    source_df["PII Level"] = source_df[API_COLUMN].map(classify_pii_level)
 
     # Recommended Action
     source_df["Recommended Action"] = source_df.apply(
@@ -117,10 +116,12 @@ def build_governance_audit():
         worksheet = writer.sheets[OUTPUT_SHEET]
         worksheet.freeze_panes(1, 0)
 
+        # Auto column widths (safe for NaN)
         for idx, col in enumerate(source_df.columns):
+            column_series = source_df[col].fillna("").astype(str)
             max_len = max(
                 len(str(col)),
-                source_df[col].astype(str).map(len).max(),
+                column_series.map(len).max()
             )
             worksheet.set_column(idx, idx, min(max(max_len + 2, 16), 60))
 
