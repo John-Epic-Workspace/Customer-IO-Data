@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 
 
 LS_TR_FILE = Path("LS_TR_ContactCandidate_Fields.xlsx")
-LS_TR_SHEET = "LS TR ContactCandidate Fields"
+LS_TR_SHEET = "HC TR ContactCandidate Fields"
 DATA_INDEX_FILE = Path("DATA_INDEX_Attributes.xlsx")
 OUTPUT_FILE = Path("LS_TR_Full_Governance_Audit.xlsx")
 OUTPUT_SHEET = "Governance Audit"
