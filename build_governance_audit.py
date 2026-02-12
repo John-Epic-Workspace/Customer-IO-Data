@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 from pathlib import Path
-
-import pandas as pd
 
 
 LS_TR_FILE = Path("LS_TR_ContactCandidate_Fields.xlsx")
@@ -17,9 +17,24 @@ OUTPUT_SHEET = "Governance Audit"
 
 # Common local filename variants seen in shared folders.
 FILE_FALLBACKS: dict[Path, list[Path]] = {
-    LS_TR_FILE: [Path("LS TR ContactCandidate Fields.xlsx")],
+    LS_TR_FILE: [
+        Path("LS TR ContactCandidate Fields.xlsx"),
+        Path("LS_TR ContactCandidate Fields.xlsx"),
+    ],
     DATA_INDEX_FILE: [Path("DATA INDEX - Attributes.xlsx")],
 }
+
+
+def ensure_required_packages() -> None:
+    """Exit with a clear error if required third-party packages are missing."""
+    required = ["pandas", "xlsxwriter", "openpyxl"]
+    missing = [package for package in required if importlib.util.find_spec(package) is None]
+    if missing:
+        missing_list = ", ".join(missing)
+        raise SystemExit(
+            "Missing required Python packages: "
+            f"{missing_list}. Install them first, e.g. `pip install pandas xlsxwriter openpyxl`."
+        )
 
 
 def resolve_file(path: Path) -> Path:
@@ -30,6 +45,23 @@ def resolve_file(path: Path) -> Path:
             return candidate
     options = ", ".join(str(candidate) for candidate in candidates)
     raise FileNotFoundError(f"None of these files were found: {options}")
+
+
+def resolve_sheet_name(pd_module, workbook_path: Path, preferred_name: str) -> str:
+    """Resolve workbook sheet name exactly, with a case-insensitive fallback."""
+    workbook = pd_module.ExcelFile(workbook_path)
+    if preferred_name in workbook.sheet_names:
+        return preferred_name
+
+    normalized = preferred_name.strip().lower()
+    for sheet_name in workbook.sheet_names:
+        if sheet_name.strip().lower() == normalized:
+            return sheet_name
+
+    raise KeyError(
+        f"Sheet '{preferred_name}' was not found in {workbook_path}. "
+        f"Available sheets: {workbook.sheet_names}"
+    )
 
 
 def classify_data_category(field_name: str) -> str:
@@ -67,10 +99,14 @@ def recommended_action(exists_in_cio: str, data_category: str) -> str:
 
 
 def build_governance_audit() -> None:
+    ensure_required_packages()
+    pd = importlib.import_module("pandas")
+
     ls_tr_path = resolve_file(LS_TR_FILE)
     data_index_path = resolve_file(DATA_INDEX_FILE)
+    ls_sheet = resolve_sheet_name(pd, ls_tr_path, LS_TR_SHEET)
 
-    ls_tr_df = pd.read_excel(ls_tr_path, sheet_name=LS_TR_SHEET)
+    ls_tr_df = pd.read_excel(ls_tr_path, sheet_name=ls_sheet)
     data_index_df = pd.read_excel(data_index_path)
 
     required_ls_tr_col = "Field API Name"
@@ -81,7 +117,6 @@ def build_governance_audit() -> None:
     if required_index_col not in data_index_df.columns:
         raise KeyError(f"Missing required column in Data Index file: '{required_index_col}'")
 
-    # Normalize for matching while preserving original source values.
     normalized_index_names = set(
         data_index_df[required_index_col]
         .fillna("")
